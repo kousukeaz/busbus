@@ -1,0 +1,1207 @@
+
+
+
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>バス報告文ジェネレーター（在庫・売上・積込）表入力版</title>
+  <style>
+    :root { --b:#ddd; --bg:#fff; --muted:#666; --ok:#0a7; --ng:#c22; }
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+      margin:14px; line-height:1.35; background:#fafafa; color:#111;
+    }
+    h1{font-size:18px;margin:0 0 10px;}
+    h2{font-size:15px;margin:0 0 8px;}
+    .card{background:var(--bg);border:1px solid var(--b);border-radius:12px;padding:12px;margin:12px 0;}
+    label{display:block;font-size:12px;margin-top:10px;color:#222;}
+    input,select,textarea,button{
+      width:100%;font-size:16px;padding:10px;border-radius:10px;border:1px solid #ccc;box-sizing:border-box;background:#fff;
+    }
+    textarea{min-height:110px;}
+    button{background:#0a7;color:#fff;border:none;cursor:pointer;}
+    button.sub{background:#555;}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+    .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+    .btnrow2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
+    .btnrow3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px;}
+    .small{font-size:12px;color:var(--muted);}
+    .status{font-size:12px;margin-top:8px;}
+    .ok{color:var(--ok);}
+    .ng{color:var(--ng);}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,"Cascadia Mono","Segoe UI Mono",monospace;}
+    table{width:100%;border-collapse:collapse;font-size:13px;}
+    th,td{border-bottom:1px solid #eee;padding:6px 4px;text-align:left;vertical-align:middle;}
+    th{color:#333;font-weight:600;}
+    .warn{color:var(--ng);font-size:12px;margin-top:6px;}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#f2f2f2;font-size:12px;color:#333;border:1px solid #e3e3e3;}
+    .stickyWrap{overflow:auto;border:1px solid #eee;border-radius:12px;background:#fff;}
+    .matrix{min-width: 920px;}
+    .matrix th{position: sticky;top: 0;background: #fff;z-index: 1;}
+    .matrix td:first-child, .matrix th:first-child{position: sticky;left: 0;background: #fff;z-index: 2;}
+    .cellNum{width: 92px;padding: 6px;font-size: 14px;border-radius: 8px;}
+    .rowTag{white-space:nowrap;}
+    .divider{height:1px;background:#eee;margin:12px 0;}
+
+    /* ===== Calendar styles ===== */
+    .calGrid{ display:grid; grid-template-columns:repeat(7, 1fr); gap:8px; }
+    .calDow{ font-size:12px;color:var(--muted); text-align:center; }
+    .calCell{ background:#fff;border:1px solid #eee;border-radius:12px; padding:10px; min-height:72px; }
+    .calCell button{
+      width:100%; background:transparent; color:#111; border:none; padding:0; cursor:pointer; text-align:left;
+    }
+    .calDate{ font-weight:700;font-size:14px; }
+    .calMoney{ margin-top:6px; font-size:12px; color:#0a7; }
+    .calEmpty{ background:transparent;border:none; }
+    .modal{
+      position:fixed; inset:0; background:rgba(0,0,0,.35);
+      display:none; align-items:center; justify-content:center; padding:16px;
+    }
+    .modal[aria-hidden="false"]{ display:flex; }
+    .modalInner{
+      width:min(520px, 100%);
+      background:#fff; border-radius:14px; padding:12px; border:1px solid #ddd;
+    }
+    .modalHead{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+
+/* ===== Mobile Fix (iPhone/Safari) ===== */
+@media (max-width: 520px){
+  body{ margin:10px; }
+
+  /* 3列/2列を1列に */
+  .grid3{ grid-template-columns: 1fr !important; }
+  .grid2{ grid-template-columns: 1fr !important; }
+  .btnrow3{ grid-template-columns: 1fr !important; }
+  .btnrow2{ grid-template-columns: 1fr !important; }
+
+  /* 入力で勝手に拡大されないように（iOSは16px未満でズームしがち） */
+  input, select, textarea{ font-size:16px !important; }
+
+  /* 表（横スクロール）を確実に効かせる */
+  .stickyWrap{
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 12px;
+  }
+
+  /* iPhoneで sticky がバグりやすいので無効化（ここが一番効く） */
+  .matrix th{ position: static !important; }
+  .matrix td:first-child, .matrix th:first-child{ position: static !important; }
+
+  /* 横幅を詰める */
+  .matrix{ min-width: 720px !important; }   /* 920 → 720 に縮める */
+  .cellNum{
+    width: 84px !important;
+    font-size: 16px !important;
+    padding: 8px !important;
+  }
+
+  /* カレンダー：タップしやすく */
+  .calCell{ min-height: 88px; }
+  .calCell button{ padding: 4px 0; }
+}
+
+/* iOSで100vhがズレる問題の軽減（モーダル等） */
+@supports (-webkit-touch-callout: none){
+  .modalInner{ max-height: 80vh; overflow:auto; -webkit-overflow-scrolling: touch; }
+}
+
+
+  </style>
+</head>
+
+<body>
+  <h1>バス報告文ジェネレーター（在庫・売上・積込）表入力版</h1>
+
+  <div class="card">
+    <h2>① 基本情報</h2>
+    <div class="grid3">
+      <div>
+        <label>日付（JST当日が初期値）</label>
+        <input id="date" type="date" />
+      </div>
+      <div>
+        <label>バス（A/B） <span class="pill">時刻で初期値</span></label>
+        <select id="bus">
+          <option value="A">バスA</option>
+          <option value="B">バスB</option>
+        </select>
+        <div class="small" id="busAutoHint"></div>
+      </div>
+      <div>
+        <label>天気（選択） <span class="pill">天気で初期値</span></label>
+        <select id="weather">
+          <option value="">（未入力）</option>
+          <option value="晴れ">晴れ</option>
+          <option value="くもり">くもり</option>
+          <option value="雨">雨</option>
+        </select>
+        <div class="small" id="weatherHint"></div>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:10px;">
+      <div>
+        <label id="leader1Label">A1（入力）</label>
+        <input id="leader1" type="text" placeholder="例：ジョージ" />
+      </div>
+      <div>
+        <label id="leader2Label">A2（入力・保存される）</label>
+        <input id="leader2" type="text" placeholder="例：ジョージ" />
+        <div class="small">※A2 / B2 は端末に保存されます</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>② 前日在庫を貼り付け（LINE文をそのまま）</h2>
+    <label>貼り付け（例：12/25(木)チケット在庫…）</label>
+    <textarea id="prevPaste" class="mono" placeholder="ここに前日の在庫メッセージを丸ごとペースト"></textarea>
+    <div class="btnrow2">
+      <button id="parseBtn">パース（読み取り）</button>
+      <button id="clearPrevBtn" class="sub">貼り付けクリア</button>
+    </div>
+
+    <div class="btnrow2" style="margin-top:10px;">
+      <button id="fetchPrevBtn">前回在庫を自動取得</button>
+      <div id="fetchStatus" class="status small"></div>
+    </div>
+
+    <div id="parseStatus" class="status small"></div>
+
+    <div style="margin-top:10px;">
+      <table>
+        <thead>
+          <tr><th>券種</th><th>前日在庫</th><th>今日売上（表の合計）</th><th>今日在庫</th></tr>
+        </thead>
+        <tbody id="invTable"></tbody>
+      </table>
+      <div id="invWarn" class="warn"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>③ 売上入力（表）</h2>
+    <div class="small">
+      列順：クレジット / 現金 / Klook / ナツメグ / 関西パス / 交通系IC　
+      ※未入力は0　
+      ※金額計算：クレジット・現金・関西パス・交通系IC（Klook/ナツメグは金銭なし）
+    </div>
+
+    <div class="stickyWrap" style="margin-top:10px;">
+      <table class="matrix" id="salesMatrix">
+        <thead>
+          <tr>
+            <th>項目</th>
+            <th>クレジット</th>
+            <th>現金</th>
+            <th>Klook</th>
+            <th>ナツメグ</th>
+            <th>関西パス</th>
+            <th>交通系IC</th>
+          </tr>
+        </thead>
+        <tbody id="matrixBody"></tbody>
+      </table>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="grid3">
+      <div>
+        <label>税率（%）</label>
+        <input id="taxRate" type="number" min="0" step="0.1" value="10" inputmode="decimal" />
+      </div>
+      <div>
+        <label>売上（税込）※表から自動計算</label>
+        <input id="salesIn" type="text" readonly />
+      </div>
+      <div>
+        <label>売上（税別）※自動</label>
+        <input id="salesEx" type="text" readonly />
+      </div>
+    </div>
+
+    <div class="grid3">
+      <div><label>【現金合計】</label><input id="cashSum" type="text" readonly /></div>
+      <div><label>【クレジット合計】</label><input id="creditSum" type="text" readonly /></div>
+      <div><label>【交通系合計】</label><input id="icSum" type="text" readonly /></div>
+    </div>
+    <div class="grid3">
+      <div><label>【関西パス合計】</label><input id="kansaiSum" type="text" readonly /></div>
+      <div><label>（参考）Klook枚数合計</label><input id="klookCount" type="text" readonly /></div>
+      <div><label>（参考）ナツメグ枚数合計</label><input id="nutsmegCount" type="text" readonly /></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>④ 積込依頼（必要な場合のみ出力）</h2>
+    <div class="grid2">
+      <div>
+        <label>@メンション（初期値あり。複数OK：改行/スペース区切り）</label>
+        <textarea id="mentions" class="mono">@Tominaga
+@chaw🦋⟭⟬⁷💜</textarea>
+      </div>
+      <div>
+        <label>追加依頼（任意：結束バンド等。行ごと）</label>
+        <textarea id="extraLoad" class="mono" placeholder="結束バンド(クリスマスの飾付け用)"></textarea>
+      </div>
+    </div>
+    <p class="small">※今日在庫が閾値以下になった券種だけ自動で積込依頼に出します。</p>
+  </div>
+
+  <div class="card">
+    <h2>⑤ 出力（LINEに貼る）</h2>
+    <div class="btnrow3">
+      <button id="genInv">在庫文を生成</button>
+      <button id="genSales">売上文を生成</button>
+      <button id="genAll">全部生成（在庫＋売上＋必要なら積込）</button>
+    </div>
+
+    <div class="btnrow3">
+      <button id="saveToSheet" class="sub">スプレッドシートに保存</button>
+      <button id="copy" class="sub">コピー</button>
+      <button id="refreshCalAfterSave" class="sub">保存後カレンダー更新</button>
+    </div>
+
+    <div id="saveStatus" class="status small"></div>
+    <div id="copyStatus" class="status ok" style="display:none;">コピーしました</div>
+
+    <label>出力</label>
+    <textarea id="out" class="mono" readonly></textarea>
+  </div>
+
+  <div class="card" id="historyCard">
+    <h2>⑥ 履歴カレンダー（売上・在庫）</h2>
+
+    <div class="grid3">
+      <div>
+        <label>表示バス</label>
+        <select id="calBus">
+          <option value="A">A</option>
+          <option value="B">B</option>
+        </select>
+        <div class="small">※入力画面のバスとは独立</div>
+      </div>
+
+      <div>
+        <label>表示月</label>
+        <div class="grid2">
+          <button id="prevMonth" class="sub">◀ 前月</button>
+          <button id="nextMonth" class="sub">次月 ▶</button>
+        </div>
+        <div id="monthTitle" class="small" style="margin-top:6px;"></div>
+      </div>
+
+      <div>
+        <label>操作</label>
+        <button id="reloadCal" class="sub">この月を再読み込み</button>
+        <div id="calStatus" class="status small"></div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="calGrid" id="calGrid"></div>
+
+    <div class="modal" id="dayModal" aria-hidden="true">
+      <div class="modalInner">
+        <div class="modalHead">
+          <div id="dayModalTitle" style="font-weight:700;"></div>
+          <button id="closeModal" class="sub" style="width:auto;padding:8px 10px;">閉じる</button>
+        </div>
+        <div id="dayModalBody" class="small"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+
+  // ★あなたのGASの /exec URL に置き換える
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbwbWy_qqSS8MDIejie8pza4BD4_WMIaDdNZ2ChUm_WJsDcfku0zb_rjA-d2HnRpQyRQ/exec";
+
+  const LS = {
+    A2: "bus_report_A2",
+    B2: "bus_report_B2",
+    lastBus: "bus_report_lastBus",
+    lastWeather: "bus_report_lastWeather",
+    clientId: "bus_report_client_id"
+  };
+
+  // ①〜⑩の券種（在庫対象）
+  const TICKETS = [
+    { key:"t1",  no:"①", label:"OCP１DAY",                 out:"①OCP１DAY→",                channel:"OCP1day（大人）",      loadName:"OCP1day（大人）",      threshold:20, request:20 },
+    { key:"t2",  no:"②", label:"OCP２DAY",                 out:"②OCP２DAY→",                channel:"OCP2day（大人）",      loadName:"OCP2day（大人）",      threshold:20, request:10 },
+    { key:"t3",  no:"③", label:"バスのみ1DAY",             out:"③バスのみ1DAY→",            channel:"バスのみ1DAY（大人）", loadName:"バスのみ1DAY(大人)",   threshold:50, request:50 },
+    { key:"t4",  no:"④", label:"バスのみ2DAY",             out:"④バスのみ2DAY →",           channel:"バスのみ2DAY（大人）", loadName:"バスのみ2DAY(大人)",   threshold:20, request:10 },
+    { key:"t5",  no:"⑤", label:"クルーズのみ",             out:"⑤クルーズのみ→",            channel:"クルーズのみ（大人）", loadName:"クルーズのみ(大人)",   threshold:10, request:10 },
+    { key:"t6",  no:"⑥", label:"OCP1day（子供）",          out:"⑥OCP1day（子供）→",         channel:"OCP1day（子供）",      loadName:"OCP1day（子供）",      threshold:10, request:10 },
+    { key:"t7",  no:"⑦", label:"OCP2day（子供)",           out:"⑦OCP2day（子供) →",         channel:"OCP2day（子供）",      loadName:"OCP2day（子供）",      threshold:10, request:10 },
+    { key:"t8",  no:"⑧", label:"バスのみ 1DAY （子供)",    out:"⑧バスのみ 1DAY （子供)→",   channel:"バスのみ1DAY（子供）", loadName:"バスのみ1DAY（子供）", threshold:20, request:10 },
+    { key:"t9",  no:"⑨", label:"バスのみ2DAY（子供）",     out:"⑨バスのみ2DAY（子供）→",    channel:"バスのみ2DAY（子供）", loadName:"バスのみ2DAY（子供）", threshold:10, request:10 },
+    { key:"t10", no:"⑩", label:"クルーズのみ（子供）",     out:"⑩クルーズのみ（子供）→",    channel:"クルーズのみ（子供）", loadName:"クルーズのみ（子供）", threshold:10, request:10 },
+  ];
+
+  // 物販
+  const GOODS = [
+    { key:"g_water", label:"水", unit:"本", price:200, outLine:(n)=>`水x${n}本` },
+    { key:"g_umb",   label:"傘", unit:"本", price:500, outLine:(n)=>`傘 × ${n}本` },
+    { key:"g_kairo", label:"カイロ", unit:"枚", price:100, outLine:(n)=>`カイロx${n}枚` },
+  ];
+
+  // 表の列
+  const COLS = [
+    { key:"credit", label:"クレジット", money:true },
+    { key:"cash",   label:"現金",       money:true },
+    { key:"klook",  label:"Klook",      money:false },
+    { key:"nutsmeg",label:"ナツメグ",   money:false },
+    { key:"kansai", label:"関西パス",   money:true },
+    { key:"ic",     label:"交通系IC",   money:true },
+  ];
+
+  // 単価
+  const PRICE = {
+    t1: 6000, t2: 8200, t3: 4400, t4: 6600, t5: 2000,
+    t6: 3300, t7: 4400, t8: 2200, t9: 3300, t10: 800,
+    g_water: 200, g_umb: 500, g_kairo: 100
+  };
+
+  // 関西パスの特例
+  function unitPrice(rowKey, colKey){
+    if(colKey === "kansai" && rowKey === "t3") return 2500;
+    if(colKey === "kansai" && rowKey === "t8") return 1500;
+    return PRICE[rowKey] ?? 0;
+  }
+
+  // 状態
+  let prevInv = Object.fromEntries(TICKETS.map(t => [t.key, 0]));
+  let counts = {};
+  const ALL_ROWS = [
+    ...TICKETS.map(t=>({key:t.key, label:`${t.no}${t.label}`, kind:"ticket"})),
+    ...GOODS.map(g=>({key:g.key, label:`${g.label}`, kind:"goods"})),
+  ];
+
+  function initCounts(){
+    counts = {};
+    for(const r of ALL_ROWS){
+      counts[r.key] = {};
+      for(const c of COLS) counts[r.key][c.key] = 0;
+    }
+  }
+
+  function toInt(v){
+    const n = Number(String(v ?? "").trim());
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  }
+  function pad2(n){ return String(n).padStart(2,"0"); }
+  function jpWeekday(d){ return ["日","月","火","水","木","金","土"][d.getDay()]; }
+
+  function getJSTParts(){
+    const dtf = new Intl.DateTimeFormat("ja-JP", { timeZone:"Asia/Tokyo", year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", hour12:false });
+    const parts = dtf.formatToParts(new Date());
+    const get = (type) => parts.find(p=>p.type===type)?.value;
+    return { y:+get("year"), m:+get("month"), d:+get("day"), hh:+get("hour"), mm:+get("minute") };
+  }
+  function initDateToJSTToday(){
+    const {y,m,d} = getJSTParts();
+    $("date").value = `${y}-${pad2(m)}-${pad2(d)}`;
+  }
+  function dateFromInput(){
+    const s = $("date").value;
+    if(!s){
+      const {y,m,d} = getJSTParts();
+      return new Date(`${y}-${pad2(m)}-${pad2(d)}T00:00:00`);
+    }
+    return new Date(s + "T00:00:00");
+  }
+  function fmtStock(d){ return `${pad2(d.getMonth()+1)}/${pad2(d.getDate())}(${jpWeekday(d)})`; }
+  function fmtSales(d){ return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日(${jpWeekday(d)})`; }
+
+  function autoDefaultBusByTime(){
+    const {hh, mm} = getJSTParts();
+    const isA = (hh < 17) || (hh === 17 && mm <= 30);
+    return isA ? "A" : "B";
+  }
+
+  function mapWeatherCodeToJP(code){
+    if(code === 0) return "晴れ";
+    if(code >= 1 && code <= 3) return "くもり";
+    if(code === 45 || code === 48) return "くもり";
+    if((code >= 51 && code <= 67) || (code >= 80 && code <= 82) || code >= 95) return "雨";
+    if(code >= 71 && code <= 77) return "雨";
+    return "くもり";
+  }
+
+  async function fetchWeatherDefault(){
+    const hint = $("weatherHint");
+    hint.textContent = "天気取得中…";
+    const fallback = { lat: 34.6937, lon: 135.5023, note: "（位置情報なし：大阪固定）" };
+
+    const getPos = () => new Promise((resolve) => {
+      if(!navigator.geolocation) return resolve(fallback);
+      navigator.geolocation.getCurrentPosition(
+        (pos)=>resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, note:"（現在地）" }),
+        ()=>resolve(fallback),
+        { enableHighAccuracy:false, timeout:3500, maximumAge: 60_000 }
+      );
+    });
+
+    const {lat, lon, note} = await getPos();
+
+    try{
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&current_weather=true&timezone=Asia%2FTokyo`;
+      const res = await fetch(url, { cache:"no-store" });
+      if(!res.ok) throw new Error("fetch failed");
+      const data = await res.json();
+      const code = data?.current_weather?.weathercode;
+      if(typeof code !== "number") throw new Error("no code");
+      const jp = mapWeatherCodeToJP(code);
+
+      if(!$("weather").dataset.touched){
+        $("weather").value = jp;
+        try{ localStorage.setItem(LS.lastWeather, jp); }catch{}
+      }
+      hint.textContent = `天気自動設定：${jp} ${note}`;
+    }catch{
+      hint.textContent = `天気取得失敗（未選択のまま）${note}`;
+    }
+  }
+
+  function updateLeaderUI(){
+    const bus = $("bus").value;
+    if(bus === "A"){
+      $("leader1Label").textContent = "A1（入力）";
+      $("leader2Label").textContent = "A2（入力・保存される）";
+      try{ $("leader2").value = localStorage.getItem(LS.A2) || $("leader2").value; }catch{}
+    }else{
+      $("leader1Label").textContent = "B1（入力）";
+      $("leader2Label").textContent = "B2（入力・保存される）";
+      try{ $("leader2").value = localStorage.getItem(LS.B2) || $("leader2").value; }catch{}
+    }
+  }
+  function persistLeader2(){
+    const bus = $("bus").value;
+    const v = ($("leader2").value || "").trim();
+    try{
+      if(bus === "A") localStorage.setItem(LS.A2, v);
+      else localStorage.setItem(LS.B2, v);
+    }catch{}
+  }
+  function leaderLine(){
+    const bus = $("bus").value;
+    const l1 = ($("leader1").value || "").trim() || "（未入力）";
+    const l2 = ($("leader2").value || "").trim() || "（未入力）";
+    return bus === "A" ? `担当: A1${l1}、 A2${l2}` : `担当: B1${l1}、 B2${l2}`;
+  }
+
+  function parsePrevText(text){
+    const res = { ok:true, missing:[], inv:{}, staff:"", bus:"" };
+    const arrow = "(?:→|⇒|➔|->|＞)";
+    for(const t of TICKETS){
+      const sym = t.no.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp(sym + "[^\\n\\r]*?" + arrow + "\\s*(\\d+)", "i");
+      const m = text.match(re);
+      if(!m){
+        res.ok = false;
+        res.missing.push(t.no);
+        res.inv[t.key] = 0;
+      }else{
+        res.inv[t.key] = toInt(m[1]);
+      }
+    }
+    return res;
+  }
+  function applyParsed(parsed){
+    prevInv = Object.fromEntries(TICKETS.map(t => [t.key, parsed.inv[t.key] ?? 0]));
+  }
+  function showParseStatus(parsed){
+    if(parsed.ok){
+      $("parseStatus").innerHTML = `<span class="ok">パース成功</span>`;
+    }else{
+      $("parseStatus").innerHTML = `<span class="ng">パース一部失敗</span>：取得できない行 ${parsed.missing.join(" ")}（該当は0扱い）`;
+    }
+  }
+
+  async function fetchPrevInventory(){
+    const statusEl = $("fetchStatus");
+    if(statusEl) statusEl.textContent = "取得中…";
+
+    const date = $("date").value;
+    const bus  = $("bus").value;
+
+    if(!GAS_URL || !GAS_URL.startsWith("https://script.google.com/")){
+      if(statusEl) statusEl.textContent = "GAS_URLが未設定です（/exec URLを貼ってください）";
+      return;
+    }
+
+    const url = `${GAS_URL}?action=getPrev&date=${encodeURIComponent(date)}&bus=${encodeURIComponent(bus)}`;
+
+    try{
+      const res = await fetch(url, { cache:"no-store" });
+      const data = await res.json();
+
+      if(!data.ok){
+        if(statusEl) statusEl.textContent = `取得失敗: ${data.error || "unknown"}`;
+        return;
+      }
+      if(!data.found){
+        if(statusEl) statusEl.textContent = "前回在庫が見つかりません（LINE貼り付けで対応してください）";
+        return;
+      }
+
+      prevInv = data.inv || prevInv;
+      renderInvTable();
+      if(statusEl) statusEl.textContent = `取得成功（${data.source_date} / バス${data.bus}）`;
+    }catch(e){
+      console.error(e);
+      if(statusEl) statusEl.textContent = "通信エラー";
+    }
+  }
+
+  function buildMatrix(){
+    const tb = $("matrixBody");
+    tb.innerHTML = "";
+    for(const r of ALL_ROWS){
+      const tr = document.createElement("tr");
+      const first = document.createElement("td");
+      first.className = "rowTag";
+      first.textContent = r.label;
+      tr.appendChild(first);
+
+      for(const c of COLS){
+        const td = document.createElement("td");
+        const inp = document.createElement("input");
+        inp.className = "cellNum";
+        inp.type = "number";
+        inp.min = "0";
+        inp.inputMode = "numeric";
+        inp.value = "0";
+        inp.addEventListener("input", () => {
+          counts[r.key][c.key] = toInt(inp.value);
+          recomputeFromMatrix();
+          renderInvTable();
+        });
+        td.appendChild(inp);
+        tr.appendChild(td);
+      }
+      tb.appendChild(tr);
+    }
+  }
+
+  function soldCountForTicket(ticketKey){
+    let s = 0;
+    for(const c of COLS) s += (counts[ticketKey]?.[c.key] ?? 0);
+    return s;
+  }
+
+  function moneyTotals(){
+    let credit=0, cash=0, kansai=0, ic=0, gross=0;
+    let klookCount=0, nutsmegCount=0;
+
+    for(const r of ALL_ROWS){
+      klookCount += (counts[r.key]?.klook ?? 0);
+      nutsmegCount += (counts[r.key]?.nutsmeg ?? 0);
+
+      for(const colKey of ["credit","cash","kansai","ic"]){
+        const n = counts[r.key]?.[colKey] ?? 0;
+        if(n <= 0) continue;
+        const unit = unitPrice(r.key, colKey);
+        const amt = n * unit;
+        gross += amt;
+        if(colKey==="credit") credit += amt;
+        if(colKey==="cash") cash += amt;
+        if(colKey==="kansai") kansai += amt;
+        if(colKey==="ic") ic += amt;
+      }
+    }
+    return { credit, cash, kansai, ic, gross, klookCount, nutsmegCount };
+  }
+
+  function recomputeFromMatrix(){
+    const { credit, cash, kansai, ic, gross, klookCount, nutsmegCount } = moneyTotals();
+    const rate = Number($("taxRate").value || 10) / 100;
+    const ex = Math.round(gross / (1 + rate));
+
+    $("salesIn").value = `${gross.toLocaleString()}円`;
+    $("salesEx").value = `${ex.toLocaleString()}円`;
+    $("cashSum").value = `${cash.toLocaleString()}円`;
+    $("creditSum").value = `${credit.toLocaleString()}円`;
+    $("icSum").value = `${ic.toLocaleString()}円`;
+    $("kansaiSum").value = `${kansai.toLocaleString()}円`;
+    $("klookCount").value = `${klookCount}枚`;
+    $("nutsmegCount").value = `${nutsmegCount}枚`;
+  }
+
+  function todayInvFor(ticket){
+    const p = prevInv[ticket.key] ?? 0;
+    const s = soldCountForTicket(ticket.key);
+    const raw = p - s;
+    return raw >= 0 ? raw : 0;
+  }
+
+  function renderInvTable(){
+    const tbody = $("invTable");
+    tbody.innerHTML = "";
+    const warn = [];
+
+    for(const t of TICKETS){
+      const p = prevInv[t.key] ?? 0;
+      const s = soldCountForTicket(t.key);
+      const ti = todayInvFor(t);
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${t.no} ${t.label}</td><td>${p}</td><td>${s}</td><td>${ti}</td>`;
+      tbody.appendChild(tr);
+
+      if(s > p) warn.push(`${t.no}（売上 ${s} が前日在庫 ${p} を超過）`);
+    }
+    $("invWarn").textContent = warn.length ? ("警告: " + warn.join(" / ") + "（今日在庫は0に丸めました）") : "";
+  }
+
+  function buildStockMessage(d){
+    const bus = $("bus").value;
+    const lines = [];
+    lines.push(`${fmtStock(d)}チケット在庫`);
+    lines.push(`バス${bus}`);
+    lines.push("");
+    for(const t of TICKETS){
+      lines.push(`${t.out}${todayInvFor(t)}`);
+    }
+    lines.push("");
+    lines.push(leaderLine());
+    return lines.join("\n");
+  }
+
+  function buildChannelLinesFor(key){
+    const lines = [];
+    for(const t of TICKETS){
+      const v = counts[t.key]?.[key] ?? 0;
+      if(v > 0) lines.push(`${t.channel}${v}名`);
+    }
+    return lines;
+  }
+
+  function goodsLinesFromMatrix(){
+    const out = [];
+    for(const g of GOODS){
+      const total = COLS.reduce((a,c)=>a + (counts[g.key]?.[c.key] ?? 0), 0);
+      if(total > 0) out.push(g.outLine(total));
+    }
+    return out;
+  }
+
+  function buildSalesMessage(d){
+    const bus = $("bus").value;
+    const weather = $("weather").value || "（未入力）";
+    const { credit, cash, ic, gross } = moneyTotals();
+    const rate = Number($("taxRate").value || 10) / 100;
+    const ex = Math.round(gross / (1 + rate));
+
+    const klookLines = buildChannelLinesFor("klook");
+    const nutsmegLines = buildChannelLinesFor("nutsmeg");
+    const kansaiLines = buildChannelLinesFor("kansai");
+    const goodsLines = goodsLinesFromMatrix();
+
+    const lines = [];
+    lines.push(`${fmtSales(d)}`);
+    lines.push(`バス${bus}`);
+    lines.push(leaderLine());
+    lines.push(`天気:  ${weather}`);
+    lines.push("");
+    lines.push(`売上 ${ex.toLocaleString()}円（税別）`);
+    lines.push(`   ${gross.toLocaleString()}円（税込）`);
+    lines.push("");
+    lines.push(`【現金合計】${cash.toLocaleString()}円`);
+    lines.push(`【クレジット合計】${credit.toLocaleString()}円`);
+    lines.push(`【交通系合計】${ic.toLocaleString()}円`);
+    lines.push(`【関西パス合計】${moneyTotals().kansai.toLocaleString()}円`);
+
+    lines.push(`【klook】`);
+    if(klookLines.length) lines.push(...klookLines);
+    lines.push(`【ナツメグ】`);
+    if(nutsmegLines.length) lines.push(...nutsmegLines);
+    lines.push(`【関西パス】`);
+    if(kansaiLines.length) lines.push(...kansaiLines);
+
+    if(goodsLines.length){
+      lines.push("");
+      lines.push(...goodsLines);
+    }
+
+    return lines.join("\n");
+  }
+
+  function parseMentions(text){
+    const raw = (text || "").trim();
+    if(!raw) return [];
+    return raw.split(/[\n\r\s]+/).map(s=>s.trim()).filter(Boolean);
+  }
+
+  function buildLoadRequestMessage(){
+    const bus = $("bus").value;
+
+    const needed = [];
+    for(const t of TICKETS){
+      const inv = todayInvFor(t);
+      if(inv <= t.threshold) needed.push(`${t.loadName}x${t.request}`);
+    }
+
+    const extras = ($("extraLoad").value || "").split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    if(!needed.length && !extras.length) return "";
+
+    const mentions = parseMentions($("mentions").value);
+    const lines = [];
+    if(mentions.length) lines.push(...mentions);
+    lines.push("");
+    lines.push("お疲れ様です！");
+    lines.push("下記積込みお願いいたします！");
+    lines.push("");
+    lines.push("【積込依頼】");
+    lines.push(`バス${bus}`);
+    if(needed.length) lines.push(...needed);
+    if(extras.length) lines.push(...extras);
+    return lines.join("\n");
+  }
+
+  function setOutput(text){ $("out").value = text; }
+
+  async function copyOutput(){
+    const text = $("out").value || "";
+    if(!text.trim()) return;
+    try{
+      await navigator.clipboard.writeText(text);
+      $("copyStatus").style.display = "block";
+      setTimeout(()=> $("copyStatus").style.display="none", 1200);
+    }catch{
+      alert("コピーに失敗しました。ブラウザの権限設定をご確認ください。");
+    }
+  }
+
+  function buildClientId(){
+    try{
+      let id = localStorage.getItem(LS.clientId);
+      if(!id){
+        id = "c_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+        localStorage.setItem(LS.clientId, id);
+      }
+      return id;
+    }catch{
+      return "";
+    }
+  }
+
+  function buildPayloadForSave(){
+    const date = $("date").value;
+    const bus  = $("bus").value;
+
+    // inv payload
+    const invObj = {};
+    for(const t of TICKETS){
+      invObj[t.key] = {
+        prev: prevInv[t.key] ?? 0,
+        sold: soldCountForTicket(t.key),
+        today: todayInvFor(t)
+      };
+    }
+
+    // matrix payload
+    const matrixObj = {};
+    for(const r of ALL_ROWS){
+      matrixObj[r.key] = {};
+      for(const c of COLS){
+        matrixObj[r.key][c.key] = counts[r.key]?.[c.key] ?? 0;
+      }
+    }
+
+    const totals = moneyTotals();
+    const rate = Number($("taxRate").value || 10) / 100;
+    const ex = Math.round((totals.gross || 0) / (1 + rate));
+    const loadText = buildLoadRequestMessage();
+    const outAll = $("out").value || "";
+
+    return {
+      action: "saveReport",
+      date, bus,
+      meta: {
+        weather: $("weather").value || "",
+        leader1: ($("leader1").value || "").trim(),
+        leader2: ($("leader2").value || "").trim(),
+        loadText,
+        outAll,
+        clientId: buildClientId()
+      },
+      totals: {
+        gross: totals.gross || 0,
+        ex,
+        cash: totals.cash || 0,
+        credit: totals.credit || 0,
+        ic: totals.ic || 0,
+        kansai: totals.kansai || 0,
+        klookCount: totals.klookCount || 0,
+        nutsmegCount: totals.nutsmegCount || 0
+      },
+      inv: invObj,
+      matrix: matrixObj
+    };
+  }
+
+  async function saveToSheet(){
+    const st = $("saveStatus");
+    if(st) st.textContent = "保存中…";
+
+    if(!GAS_URL || !GAS_URL.startsWith("https://script.google.com/")){
+      if(st) st.textContent = "GAS_URLが未設定です（/exec URLを貼ってください）";
+      return;
+    }
+
+    // 出力が空なら自動生成して保存
+    if(!($("out").value || "").trim()){
+      $("genAll").click();
+    }
+
+    const payload = buildPayloadForSave();
+
+    try{
+      const res = await fetch(GAS_URL, {
+        method: "POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if(!data.ok){
+        if(st) st.textContent = `保存失敗: ${data.error || "unknown"}`;
+        return;
+      }
+      if(st) st.textContent = "保存OK";
+    }catch(e){
+      console.error(e);
+      if(st) st.textContent = "通信エラー";
+    }
+  }
+
+  // ===== Calendar =====
+  const DOW = ["日","月","火","水","木","金","土"];
+  let calYear, calMonth; // 1-12
+
+  function ymd(y,m,d){ return `${y}-${pad2(m)}-${pad2(d)}`; }
+
+  function setCalToNow(){
+    const now = new Date();
+    calYear = now.getFullYear();
+    calMonth = now.getMonth()+1;
+  }
+
+  function renderDow(){
+    const grid = $("calGrid");
+    grid.innerHTML = "";
+    for(const w of DOW){
+      const div = document.createElement("div");
+      div.className = "calDow";
+      div.textContent = w;
+      grid.appendChild(div);
+    }
+  }
+
+  function escapeHtml(s){
+    return String(s)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+
+  function openModal(title, html){
+    $("dayModalTitle").textContent = title;
+    $("dayModalBody").innerHTML = html;
+    $("dayModal").setAttribute("aria-hidden","false");
+  }
+  function closeModal(){
+    $("dayModal").setAttribute("aria-hidden","true");
+  }
+
+  async function loadCalendar(){
+    const st = $("calStatus");
+    if(st) st.textContent = "読み込み中…";
+
+    const bus = $("calBus").value;
+    const year = calYear;
+    const month = pad2(calMonth);
+
+    $("monthTitle").textContent = `${year}年 ${calMonth}月（バス${bus}）`;
+
+    const url = `${GAS_URL}?action=getMonth&year=${encodeURIComponent(year)}&month=${encodeURIComponent(month)}&bus=${encodeURIComponent(bus)}`;
+
+    try{
+      const res = await fetch(url, { cache:"no-store" });
+      const data = await res.json();
+      if(!data.ok){
+        if(st) st.textContent = `失敗: ${data.error || "unknown"}`;
+        return;
+      }
+      const days = data.days || {};
+      buildCalendarGrid_(year, calMonth, bus, days);
+      if(st) st.textContent = "OK（日付をタップすると詳細が出ます）";
+    }catch(e){
+      console.error(e);
+      if(st) st.textContent = "通信エラー";
+    }
+  }
+
+  function buildCalendarGrid_(year, month, bus, dayToGross){
+    renderDow();
+    const grid = $("calGrid");
+
+    const first = new Date(year, month-1, 1);
+    const last  = new Date(year, month, 0);
+    const firstDow = first.getDay();
+    const lastDate = last.getDate();
+
+    for(let i=0;i<firstDow;i++){
+      const div = document.createElement("div");
+      div.className = "calCell calEmpty";
+      grid.appendChild(div);
+    }
+
+    for(let d=1; d<=lastDate; d++){
+      const dateStr = ymd(year, month, d);
+      const gross = Number(dayToGross?.[dateStr] ?? 0);
+
+      const cell = document.createElement("div");
+      cell.className = "calCell";
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.addEventListener("click", ()=> loadDayDetail(dateStr, bus));
+
+      const top = document.createElement("div");
+      top.className = "calDate";
+      top.textContent = String(d);
+      btn.appendChild(top);
+
+      if(gross > 0){
+        const money = document.createElement("div");
+        money.className = "calMoney";
+        money.textContent = `売上: ¥${gross.toLocaleString()}`;
+        btn.appendChild(money);
+      }else{
+        const small = document.createElement("div");
+        small.className = "small";
+        small.style.marginTop = "6px";
+        small.textContent = "データなし";
+        btn.appendChild(small);
+      }
+
+      cell.appendChild(btn);
+      grid.appendChild(cell);
+    }
+  }
+
+  async function loadDayDetail(dateStr, bus){
+    const url = `${GAS_URL}?action=getDay&date=${encodeURIComponent(dateStr)}&bus=${encodeURIComponent(bus)}`;
+    openModal(`${dateStr}（バス${bus}）`, "読み込み中…");
+
+    try{
+      const res = await fetch(url, { cache:"no-store" });
+      const data = await res.json();
+      if(!data.ok){
+        openModal(`${dateStr}（バス${bus}）`, `取得失敗: ${data.error || "unknown"}`);
+        return;
+      }
+      if(!data.found || !data.report){
+        openModal(`${dateStr}（バス${bus}）`, "この日付のレポートがありません。");
+        return;
+      }
+
+      const r = data.report;
+      const inv = data.inventory || {};
+      const keys = Object.keys(inv).sort();
+
+      const invHtml = keys.length
+        ? `<table>
+            <thead><tr><th>ticket_key</th><th>残数</th></tr></thead>
+            <tbody>
+              ${keys.map(k=>`<tr><td>${escapeHtml(k)}</td><td>${Number(inv[k]||0)}</td></tr>`).join("")}
+            </tbody>
+          </table>`
+        : `<div class="small">在庫データなし</div>`;
+
+      const html = `
+        <div class="small">
+          <div><b>天気</b>: ${escapeHtml(r.weather||"")}</div>
+          <div><b>リーダー</b>: ${escapeHtml(r.leader1||"")} / ${escapeHtml(r.leader2||"")}</div>
+          <div class="divider"></div>
+          <div><b>売上（税込）</b>: ¥${Number(r.gross||0).toLocaleString()}</div>
+          <div><b>現金</b>: ¥${Number(r.cash||0).toLocaleString()}</div>
+          <div><b>クレジット</b>: ¥${Number(r.credit||0).toLocaleString()}</div>
+          <div><b>IC</b>: ¥${Number(r.ic||0).toLocaleString()}</div>
+          <div><b>関西周遊</b>: ¥${Number(r.kansai||0).toLocaleString()}</div>
+          <div><b>Klook</b>: ${Number(r.klookCount||0)} 件</div>
+          <div><b>Nutsmeg</b>: ${Number(r.nutsmegCount||0)} 件</div>
+          <div class="divider"></div>
+          <div style="font-weight:700;">在庫（今日残）</div>
+          ${invHtml}
+        </div>
+      `;
+      openModal(`${dateStr}（バス${bus}）`, html);
+    }catch(e){
+      console.error(e);
+      openModal(`${dateStr}（バス${bus}）`, "通信エラー");
+    }
+  }
+
+  // ===== events =====
+  $("taxRate").addEventListener("input", () => recomputeFromMatrix());
+
+  $("parseBtn").addEventListener("click", (e) => {
+    e.preventDefault();
+    const text = $("prevPaste").value || "";
+    const parsed = parsePrevText(text);
+    applyParsed(parsed);
+    showParseStatus(parsed);
+    renderInvTable();
+  });
+
+  $("clearPrevBtn").addEventListener("click", (e) => {
+    e.preventDefault();
+    $("prevPaste").value = "";
+    $("parseStatus").textContent = "";
+    prevInv = Object.fromEntries(TICKETS.map(t => [t.key, 0]));
+    renderInvTable();
+  });
+
+  $("prevPaste").addEventListener("input", () => {
+    const text = $("prevPaste").value || "";
+    if(text.trim().length < 10) return;
+    const parsed = parsePrevText(text);
+    applyParsed(parsed);
+    showParseStatus(parsed);
+    renderInvTable();
+  });
+
+  $("fetchPrevBtn").addEventListener("click", (e) => {
+    e.preventDefault();
+    fetchPrevInventory();
+  });
+
+  $("genInv").addEventListener("click", (e) => {
+    e.preventDefault();
+    setOutput(buildStockMessage(dateFromInput()));
+  });
+
+  $("genSales").addEventListener("click", (e) => {
+    e.preventDefault();
+    setOutput(buildSalesMessage(dateFromInput()));
+  });
+
+  $("genAll").addEventListener("click", (e) => {
+    e.preventDefault();
+    const d = dateFromInput();
+    const stock = buildStockMessage(d);
+    const sales = buildSalesMessage(d);
+    const load = buildLoadRequestMessage();
+    setOutput(load ? (stock + "\n\n" + sales + "\n\n" + load) : (stock + "\n\n" + sales));
+  });
+
+  $("copy").addEventListener("click", async (e) => {
+    e.preventDefault();
+    if(!($("out").value || "").trim()) $("genAll").click();
+    await copyOutput();
+  });
+
+  $("saveToSheet").addEventListener("click", async (e) => {
+    e.preventDefault();
+    await saveToSheet();
+  });
+
+  $("refreshCalAfterSave").addEventListener("click", async (e) => {
+    e.preventDefault();
+    await saveToSheet();
+    // 表示バスを入力バスに揃える（好みで削除OK）
+    $("calBus").value = $("bus").value;
+    await loadCalendar();
+  });
+
+  $("bus").addEventListener("change", () => {
+    updateLeaderUI();
+    try{ localStorage.setItem(LS.lastBus, $("bus").value); }catch{}
+  });
+
+  $("leader2").addEventListener("input", () => persistLeader2());
+  $("weather").addEventListener("change", () => {
+    $("weather").dataset.touched = "1";
+    try{ localStorage.setItem(LS.lastWeather, $("weather").value);}catch{}
+  });
+
+  // calendar controls
+  $("prevMonth").addEventListener("click",(e)=>{
+    e.preventDefault();
+    calMonth--;
+    if(calMonth<=0){ calMonth=12; calYear--; }
+    loadCalendar();
+  });
+  $("nextMonth").addEventListener("click",(e)=>{
+    e.preventDefault();
+    calMonth++;
+    if(calMonth>=13){ calMonth=1; calYear++; }
+    loadCalendar();
+  });
+  $("reloadCal").addEventListener("click",(e)=>{
+    e.preventDefault();
+    loadCalendar();
+  });
+  $("calBus").addEventListener("change", ()=> loadCalendar());
+
+  $("closeModal").addEventListener("click",(e)=>{
+    e.preventDefault();
+    closeModal();
+  });
+  $("dayModal").addEventListener("click",(e)=>{
+    if(e.target && e.target.id==="dayModal") closeModal();
+  });
+
+  // ===== init =====
+  function initBusDefault(){
+    let chosen = "";
+    try{ chosen = localStorage.getItem(LS.lastBus) || ""; }catch{}
+    if(chosen !== "A" && chosen !== "B"){
+      chosen = autoDefaultBusByTime();
+      $("busAutoHint").textContent = `時刻(JST)により初期値：バス${chosen}`;
+    }else{
+      $("busAutoHint").textContent = `前回選択を復元：バス${chosen}`;
+    }
+    $("bus").value = chosen;
+  }
+
+  function initWeatherDefault(){
+    let chosen = "";
+    try{ chosen = localStorage.getItem(LS.lastWeather) || ""; }catch{}
+    if(chosen && !$("weather").dataset.touched){
+      $("weather").value = chosen;
+      $("weatherHint").textContent = `前回選択を復元：${chosen}`;
+    }
+    fetchWeatherDefault();
+  }
+
+  initCounts();
+  buildMatrix();
+  initDateToJSTToday();
+  initBusDefault();
+  updateLeaderUI();
+  initWeatherDefault();
+  recomputeFromMatrix();
+  renderInvTable();
+
+  // calendar init
+  setCalToNow();
+  $("calBus").value = $("bus").value;
+  loadCalendar();
+})();
+</script>
+
+</body>
+</html>
